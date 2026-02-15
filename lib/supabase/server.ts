@@ -10,19 +10,14 @@ export async function createClient() {
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll().map((c) => ({ name: c.name, value: c.value }));
+          return cookieStore.getAll();
         },
-        setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
+        setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) => {
-              cookieStore.set({
-                name,
-                value,
-                ...(options ?? {}),
-              });
-            });
-          } catch (error) {
-            console.error("Error setting cookies:", error);
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
           }
         },
       },

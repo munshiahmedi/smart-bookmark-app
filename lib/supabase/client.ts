@@ -13,34 +13,16 @@ export function createClient() {
   return createBrowserClient(url, anonKey, {
     cookies: {
       get(name: string) {
-        if (typeof document === "undefined") return undefined;
-        const match = document.cookie
-          .split("; ")
-          .find((row) => row.startsWith(`${name}=`));
-        if (!match) return undefined;
-        return decodeURIComponent(match.split("=").slice(1).join("="));
+        return document.cookie
+          .split('; ')
+          .find((row) => row.startsWith(`${name}=`))
+          ?.split('=')[1];
       },
       set(name: string, value: string, options: any) {
-        if (typeof document === "undefined") return;
-
-        const opts = options ?? {};
-        const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
-        const sameSite = opts.sameSite ?? "lax";
-        const secure = Boolean(opts.secure) && isHttps;
-        let cookie = `${name}=${encodeURIComponent(value)}`;
-
-        cookie += `; Path=${opts.path ?? "/"}`;
-
-        if (opts.maxAge != null) cookie += `; Max-Age=${opts.maxAge}`;
-        if (opts.expires) cookie += `; Expires=${new Date(opts.expires).toUTCString()}`;
-        if (opts.domain) cookie += `; Domain=${opts.domain}`;
-        if (sameSite) cookie += `; SameSite=${sameSite}`;
-        if (secure) cookie += `; Secure`;
-
-        document.cookie = cookie;
+        document.cookie = `${name}=${value}; path=/; max-age=${options?.maxAge ?? 3600}; ${options?.domain ? `domain=${options.domain};` : ''} ${options?.secure ? 'secure;' : ''} ${options?.sameSite ? `samesite=${options.sameSite};` : ''}`;
       },
-      remove(name: string, options: any) {
-        this.set(name, "", { ...(options ?? {}), maxAge: 0 });
+      remove(name: string) {
+        document.cookie = `${name}=; path=/; max-age=0`;
       },
     },
   });
