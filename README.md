@@ -68,9 +68,4 @@ if (typeof window === "undefined") return;
 
 **Solution**: The complete authentication flow overhaul above ensured proper PKCE handling, eliminating the need for double login attempts.
 
-## 📝 Key Learnings
 
-1. **Library Compatibility**: Always ensure authentication libraries are compatible and don't mix old/new versions
-2. **SSR Considerations**: Client-side code must be properly guarded against server-side execution
-3. **Cookie Synchronization**: Proper cookie handling is crucial for authentication flows in SSR frameworks
-4. **PKCE Flow**: Understanding the complete OAuth PKCE flow is essential for debugging auth issues
