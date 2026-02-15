@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 
 type Bookmark = {
@@ -10,26 +11,62 @@ type Bookmark = {
 };
 
 export default function Dashboard() {
+  const router = useRouter();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
 
   // 🔐 Check auth + fetch bookmarks
   useEffect(() => {
+    let subscription: { unsubscribe: () => void } | null = null;
+    let bookmarkSubscription: any = null;
+    
     const loadData = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
+      // First check for existing session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        // If no session, set up auth state change listener
+        const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
+          async (event, session) => {
+            if (session) {
+              // If we get a session from auth state change, proceed with loading data
+              await fetchBookmarks();
+              setLoading(false);
+              setAuthChecked(true);
+            } else {
+              // If still no session after state change, redirect to login
+              router.push('/login');
+            }
+          }
+        );
+        subscription = authSubscription;
 
-      if (!sessionData.session) {
-        window.location.replace("/login");
-        return;
+        // If no session and no immediate auth state change, redirect after a short delay
+        const timer = setTimeout(() => {
+          if (!authChecked) {
+            router.push('/login');
+          }
+        }, 500);
+
+        return () => {
+          clearTimeout(timer);
+          subscription?.unsubscribe();
+          if (bookmarkSubscription) {
+            supabase.removeChannel(bookmarkSubscription);
+          }
+        };
       }
 
+      // If we have a session, proceed with loading data
+      setAuthChecked(true);
       await fetchBookmarks();
       setLoading(false);
 
       // --- Setup realtime subscription ---
-      const subscription = supabase
+      bookmarkSubscription = supabase
         .channel("public:bookmarks")
         .on(
           "postgres_changes",
@@ -57,15 +94,18 @@ export default function Dashboard() {
           }
         )
         .subscribe();
-
-      // Clean up on unmount
-      return () => {
-        supabase.removeChannel(subscription);
-      };
     };
 
     loadData();
-  }, []);
+
+    // Clean up on unmount
+    return () => {
+      subscription?.unsubscribe();
+      if (bookmarkSubscription) {
+        supabase.removeChannel(bookmarkSubscription);
+      }
+    };
+  }, [router, authChecked]);
 
   // 📥 Fetch bookmarks
   const fetchBookmarks = async () => {
