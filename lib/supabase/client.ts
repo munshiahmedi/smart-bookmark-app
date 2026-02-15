@@ -16,7 +16,7 @@ export function createClient() {
         if (typeof document === "undefined") return undefined;
         const match = document.cookie
           .split("; ")
-          .find((row) => row.startsWith(`${encodeURIComponent(name)}=`));
+          .find((row) => row.startsWith(`${name}=`));
         if (!match) return undefined;
         return decodeURIComponent(match.split("=").slice(1).join("="));
       },
@@ -24,7 +24,7 @@ export function createClient() {
         if (typeof document === "undefined") return;
 
         const opts = options ?? {};
-        let cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
+        let cookie = `${name}=${encodeURIComponent(value)}`;
 
         cookie += `; Path=${opts.path ?? "/"}`;
 
