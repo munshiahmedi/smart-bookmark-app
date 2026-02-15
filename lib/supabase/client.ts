@@ -24,6 +24,9 @@ export function createClient() {
         if (typeof document === "undefined") return;
 
         const opts = options ?? {};
+        const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+        const sameSite = opts.sameSite ?? "lax";
+        const secure = Boolean(opts.secure) && isHttps;
         let cookie = `${name}=${encodeURIComponent(value)}`;
 
         cookie += `; Path=${opts.path ?? "/"}`;
@@ -31,8 +34,8 @@ export function createClient() {
         if (opts.maxAge != null) cookie += `; Max-Age=${opts.maxAge}`;
         if (opts.expires) cookie += `; Expires=${new Date(opts.expires).toUTCString()}`;
         if (opts.domain) cookie += `; Domain=${opts.domain}`;
-        if (opts.sameSite) cookie += `; SameSite=${opts.sameSite}`;
-        if (opts.secure) cookie += `; Secure`;
+        if (sameSite) cookie += `; SameSite=${sameSite}`;
+        if (secure) cookie += `; Secure`;
 
         document.cookie = cookie;
       },
