@@ -20,6 +20,8 @@ export default function Dashboard() {
   const supabase = createClient();
 
   useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
     const fetchBookmarks = async () => {
       try {
         setLoading(true);
@@ -45,26 +47,33 @@ export default function Dashboard() {
       }
     };
 
-    fetchBookmarks();
+    const init = async () => {
+      await fetchBookmarks();
 
-    const channel = supabase
-      .channel("bookmarks")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "bookmarks",
-          filter: `user_id=eq.${supabase.auth.getUser().then(u => u.data.user?.id)}`
-        },
-        (payload) => {
-          fetchBookmarks();
-        }
-      )
-      .subscribe();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      channel = supabase
+        .channel("bookmarks")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "bookmarks",
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            fetchBookmarks();
+          }
+        )
+        .subscribe();
+    };
+
+    init();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
 
