@@ -1,140 +1,35 @@
-// In app/dashboard/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 
 type Bookmark = {
   id: string;
   title: string;
   url: string;
-  user_id?: string;
-  created_at?: string;
 };
 
 export default function Dashboard() {
-  const router = useRouter();
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // 📥 Fetch bookmarks
-  const fetchBookmarks = async () => {
-    const { data, error } = await supabase
-      .from("bookmarks")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (!error && data) {
-      setBookmarks(data);
-    }
-  };
-
-  // ➕ Add bookmark
-  const addBookmark = async () => {
-    if (!title || !url) return alert("Please fill in both title and URL");
-
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    const { error } = await supabase
-      .from("bookmarks")
-      .insert([{ title, url, user_id: user.id }]);
-
-    if (!error) {
-      setTitle("");
-      setUrl("");
-    } else {
-      console.error("Error adding bookmark:", error);
-    }
-  };
-
-  // ❌ Delete bookmark
-  const deleteBookmark = async (id: string) => {
-    const { error } = await supabase
-      .from("bookmarks")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      console.error("Error deleting bookmark:", error);
-    }
-  };
 
   // 🔐 Check auth + fetch bookmarks
   useEffect(() => {
-    let isMounted = true;
-    let subscription: { unsubscribe: () => void } | null = null;
-    let bookmarkSubscription: any = null;
-
     const loadData = async () => {
-      try {
-        // First check for existing session
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (!session) {
-          // If no session, set up auth state change listener
-          const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
-            async (event, session) => {
-              if (session) {
-                // If we get a session from auth state change
-                if (isMounted) {
-                  setIsAuthenticated(true);
-                  await fetchBookmarks();
-                  setLoading(false);
-                }
-              } else if (isMounted) {
-                // If still no session after state change, redirect to login
-                router.push('/login');
-              }
-            }
-          );
-          subscription = authSubscription;
+      const { data: sessionData } = await supabase.auth.getSession();
 
-          // If no session and no immediate auth state change, redirect after a short delay
-          const timer = setTimeout(() => {
-            if (isMounted && !isAuthenticated) {
-              router.push('/login');
-            }
-          }, 1000);
-
-          return () => {
-            clearTimeout(timer);
-            subscription?.unsubscribe();
-            if (bookmarkSubscription) {
-              supabase.removeChannel(bookmarkSubscription);
-            }
-          };
-        }
-
-        // If we have a session, proceed with loading data
-        if (isMounted) {
-          setIsAuthenticated(true);
-          await fetchBookmarks();
-          setLoading(false);
-        }
-
-        // Setup realtime subscription
-        bookmarkSubscription = setupRealtimeSubscription();
-
-      } catch (error) {
-        console.error('Error in loadData:', error);
-        if (isMounted) {
-          setLoading(false);
-          router.push('/login');
-        }
+      if (!sessionData.session) {
+        window.location.replace("/login");
+        return;
       }
-    };
 
-    const setupRealtimeSubscription = () => {
-      return supabase
+      await fetchBookmarks();
+      setLoading(false);
+
+      // --- Setup realtime subscription ---
+      const subscription = supabase
         .channel("public:bookmarks")
         .on(
           "postgres_changes",
@@ -162,34 +57,58 @@ export default function Dashboard() {
           }
         )
         .subscribe();
+
+      // Clean up on unmount
+      return () => {
+        supabase.removeChannel(subscription);
+      };
     };
 
     loadData();
+  }, []);
 
-    // Clean up on unmount
-    return () => {
-      isMounted = false;
-      subscription?.unsubscribe();
-      if (bookmarkSubscription) {
-        supabase.removeChannel(bookmarkSubscription);
-      }
-    };
-  }, [router, isAuthenticated]);
+  // 📥 Fetch bookmarks
+  const fetchBookmarks = async () => {
+    const { data, error } = await supabase
+      .from("bookmarks")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your bookmarks...</p>
-        </div>
-      </div>
-    );
-  }
+    if (!error && data) {
+      setBookmarks(data);
+    }
+  };
+
+  // ➕ Add bookmark
+  const addBookmark = async () => {
+    if (!title || !url) return alert("Fill all fields");
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    await supabase.from("bookmarks").insert({
+      title,
+      url,
+      user_id: user?.id,
+    });
+
+    setTitle("");
+    setUrl("");
+    // No need to fetchBookmarks() anymore; realtime handles it
+  };
+
+  // ❌ Delete bookmark
+  const deleteBookmark = async (id: string) => {
+    await supabase.from("bookmarks").delete().eq("id", id);
+    // No need to fetchBookmarks() anymore; realtime handles it
+  };
+
+  if (loading) return <p className="p-6 text-center">Loading bookmarks...</p>;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-2xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           {/* Header */}
           <div className="p-6 border-b border-gray-100 flex justify-between items-center">
@@ -197,37 +116,32 @@ export default function Dashboard() {
             <button
               onClick={async () => {
                 await supabase.auth.signOut();
-                router.push('/login');
+                window.location.href = '/login';
               }}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="text-base font-medium text-gray-600 hover:text-gray-900 transition-colors"
             >
-              Sign out
+              Logout
             </button>
           </div>
 
           {/* Add Bookmark Form */}
           <div className="p-6 border-b border-gray-100">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 space-y-2">
-                <input
-                  type="text"
-                  placeholder="Title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <input
-                  type="url"
-                  placeholder="https://example.com"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+            <div className="flex gap-3">
+              <input
+                placeholder="Title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="flex-1 border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <input
+                placeholder="https://example.com"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="flex-1 border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
               <button
                 onClick={addBookmark}
-                disabled={!title.trim() || !url.trim()}
-                className="bg-black hover:bg-gray-900 text-white font-medium px-6 py-2 rounded-lg transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 shadow-md hover:shadow-lg disabled:opacity-50 disabled:transform-none disabled:shadow-none"
+                className="bg-black hover:bg-gray-900 text-white font-medium px-6 py-2 rounded-lg transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 shadow-md hover:shadow-lg"
               >
                 Add Bookmark
               </button>
@@ -242,44 +156,28 @@ export default function Dashboard() {
               </div>
             ) : (
               <ul className="divide-y divide-gray-100">
-                {bookmarks.map((bookmark) => (
+                {bookmarks.map((b) => (
                   <li
-                    key={bookmark.id}
-                    className="group hover:bg-gray-50 transition-colors"
+                    key={b.id}
+                    className="group hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0 hover:bg-gray-50/50"
                   >
-                    <div className="px-6 py-4 flex items-center justify-between">
+                    <div className="px-6 py-5 flex items-center justify-between">
                       <a
-                        href={bookmark.url}
+                        href={b.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 min-w-0"
+                        className="text-blue-600 hover:underline font-medium text-base flex-1 truncate mr-4"
+                        title={`${b.title} - ${b.url}`}
                       >
-                        <p className="text-gray-900 font-medium truncate">
-                          {bookmark.title}
-                        </p>
-                        <p className="text-sm text-gray-500 truncate">
-                          {new URL(bookmark.url).hostname.replace('www.', '')}
-                        </p>
+                        <span className="text-gray-900 font-semibold text-lg">{b.title}</span>
+                        <span className="text-gray-500 text-sm block mt-1 truncate">{new URL(b.url).hostname.replace('www.', '')}</span>
                       </a>
                       <button
-                        onClick={() => deleteBookmark(bookmark.id)}
-                        className="ml-4 text-red-600 hover:text-red-800 transition-colors"
+                        onClick={() => deleteBookmark(b.id)}
+                        className="text-gray-800 hover:bg-gray-100 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border border-gray-200"
                         title="Delete bookmark"
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-5 w-5"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                          />
-                        </svg>
+                        Delete
                       </button>
                     </div>
                   </li>
