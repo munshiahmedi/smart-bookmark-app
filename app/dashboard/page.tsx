@@ -100,12 +100,22 @@ export default function Dashboard() {
 
   const handleDeleteBookmark = async (id: string) => {
     try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error("Not authenticated");
+
       const { error } = await supabase
         .from("bookmarks")
         .delete()
-        .eq("id", id);
-      
+        .eq("id", id)
+        .eq("user_id", user.id);
+
       if (error) throw error;
+
+      setBookmarks((prev) => prev.filter((b) => b.id !== id));
     } catch (error) {
       console.error("Error deleting bookmark:", error);
     }
