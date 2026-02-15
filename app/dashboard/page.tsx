@@ -1,9 +1,9 @@
+
 // app/dashboard/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 type Bookmark = {
   id: string;
@@ -17,16 +17,23 @@ export default function Dashboard() {
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
   const supabase = createClient();
 
   useEffect(() => {
     const fetchBookmarks = async () => {
       try {
         setLoading(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user) {
+          window.location.href = '/login';
+          return;
+        }
+
         const { data, error } = await supabase
           .from("bookmarks")
           .select("*")
+          .eq('user_id', user.id)
           .order("created_at", { ascending: false });
 
         if (error) throw error;
@@ -40,13 +47,17 @@ export default function Dashboard() {
 
     fetchBookmarks();
 
-    // Set up realtime subscription
     const channel = supabase
       .channel("bookmarks")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "bookmarks" },
-        () => {
+        {
+          event: "*",
+          schema: "public",
+          table: "bookmarks",
+          filter: `user_id=eq.${supabase.auth.getUser().then(u => u.data.user?.id)}`
+        },
+        (payload) => {
           fetchBookmarks();
         }
       )
@@ -62,12 +73,15 @@ export default function Dashboard() {
     if (!title || !url) return;
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
       const { error } = await supabase
         .from("bookmarks")
-        .insert([{ title, url, user_id: (await supabase.auth.getUser()).data.user?.id }]);
-
+        .insert([{ title, url, user_id: user.id }]);
+      
       if (error) throw error;
-
+      
       setTitle("");
       setUrl("");
     } catch (error) {
@@ -81,7 +95,7 @@ export default function Dashboard() {
         .from("bookmarks")
         .delete()
         .eq("id", id);
-
+      
       if (error) throw error;
     } catch (error) {
       console.error("Error deleting bookmark:", error);
@@ -89,15 +103,18 @@ export default function Dashboard() {
   };
 
   if (loading) {
-    return <div>Loading bookmarks...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
 
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6">My Bookmarks</h1>
-      
       <form onSubmit={handleAddBookmark} className="mb-8">
-        <div className="flex gap-2 mb-4">
+        <div className="flex flex-col md:flex-row gap-2 mb-4">
           <input
             type="text"
             value={title}
@@ -122,7 +139,6 @@ export default function Dashboard() {
           </button>
         </div>
       </form>
-
       <div className="grid gap-4">
         {bookmarks.map((bookmark) => (
           <div
