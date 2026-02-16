@@ -4,8 +4,10 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   console.log('Middleware running for:', request.url)
   
-  let supabaseResponse = NextResponse.next({
-    request,
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
   })
 
   const supabase = createServerClient(
@@ -20,11 +22,13 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) => {
             request.cookies.set(name, value)
           })
-          supabaseResponse = NextResponse.next({
-            request,
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
           })
           cookiesToSet.forEach(({ name, value, options }) => {
-            supabaseResponse.cookies.set(name, value, {
+            response.cookies.set(name, value, {
               ...options,
               // Ensure cookies work in production
               secure: process.env.NODE_ENV === 'production',
@@ -37,11 +41,16 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Refresh session if expired - required for Server Components
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
   // IMPORTANT: DO NOT REMOVE auth listeners
   // They are required for the auth flow to work properly
-  supabaseResponse.headers.set('x-middleware-cache', 'no-cache')
+  response.headers.set('x-middleware-cache', 'no-cache')
 
-  return supabaseResponse
+  return response
 }
 
 export const config = {
