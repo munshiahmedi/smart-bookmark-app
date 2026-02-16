@@ -1,67 +1,37 @@
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
-  console.log('Middleware running for:', request.url)
-  console.log('Request cookies:', request.cookies.getAll().map(c => c.name))
-  
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
+export async function middleware(req: NextRequest) {
+  const res = NextResponse.next()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll()
+        get: (name) => req.cookies.get(name)?.value,
+        set: (name, value, options) => {
+          res.cookies.set({ name, value, ...options })
         },
-        setAll(cookiesToSet) {
-          console.log('Setting cookies:', cookiesToSet.map(c => c.name))
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value)
-          })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, {
-              ...options,
-              // Ensure cookies work in production
-              secure: process.env.NODE_ENV === 'production',
-              sameSite: 'lax',
-              path: '/',
-            })
-          })
+        remove: (name, options) => {
+          res.cookies.set({ name, value: '', ...options })
         },
       },
     }
   )
 
-  // Refresh session if expired - required for Server Components
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  // IMPORTANT: just check session, nothing else
+  await supabase.auth.getSession()
 
-  console.log('Session after refresh:', !!session)
-
-  // IMPORTANT: DO NOT REMOVE auth listeners
-  // They are required for the auth flow to work properly
-  response.headers.set('x-middleware-cache', 'no-cache')
-
-  return response
+  return res
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-    '/auth/callback',
-    '/login',
-    '/dashboard'
+    /*
+     Exclude auth routes
+    */
+    '/((?!auth/callback|login|_next|favicon.ico).*)',
   ],
 }
