@@ -21,7 +21,17 @@ export function createClient() {
       },
       set(name: string, value: string, options: any) {
         if (typeof window === "undefined") return;
-        document.cookie = `${name}=${value}; path=/; max-age=${options?.maxAge ?? 3600}; ${options?.domain ? `domain=${options.domain};` : ''} ${options?.secure ? 'secure;' : ''} ${options?.sameSite ? `samesite=${options.sameSite};` : ''}`;
+        const cookieOptions = [
+          `${name}=${value}`,
+          'path=/',
+          `max-age=${options?.maxAge ?? 3600}`,
+        ];
+        
+        if (options?.domain) cookieOptions.push(`domain=${options.domain}`);
+        if (options?.secure) cookieOptions.push('secure');
+        if (options?.sameSite) cookieOptions.push(`samesite=${options.sameSite}`);
+        
+        document.cookie = cookieOptions.join('; ');
       },
       remove(name: string) {
         if (typeof window === "undefined") return;
