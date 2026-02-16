@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   console.log('Middleware running for:', request.url)
+  console.log('Request cookies:', request.cookies.getAll().map(c => c.name))
   
   let response = NextResponse.next({
     request: {
@@ -19,6 +20,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
+          console.log('Setting cookies:', cookiesToSet.map(c => c.name))
           cookiesToSet.forEach(({ name, value, options }) => {
             request.cookies.set(name, value)
           })
@@ -45,6 +47,8 @@ export async function middleware(request: NextRequest) {
   const {
     data: { session },
   } = await supabase.auth.getSession()
+
+  console.log('Session after refresh:', !!session)
 
   // IMPORTANT: DO NOT REMOVE auth listeners
   // They are required for the auth flow to work properly
