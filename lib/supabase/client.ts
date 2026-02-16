@@ -28,8 +28,8 @@ export function createClient() {
         ];
         
         if (options?.domain) cookieOptions.push(`domain=${options.domain}`);
-        if (options?.secure) cookieOptions.push('secure');
-        if (options?.sameSite) cookieOptions.push(`samesite=${options.sameSite}`);
+        if (process.env.NODE_ENV === 'production') cookieOptions.push('secure');
+        cookieOptions.push(`samesite=lax`);
         
         document.cookie = cookieOptions.join('; ');
       },
